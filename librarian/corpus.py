@@ -14,6 +14,13 @@ VERSION = '3.12'
 PAGES = ['tutorial/' + p for p in ['introduction','controlflow','datastructures','modules','inputoutput','errors','classes','stdlib','stdlib2','venv','floatingpoint']]
 PAGES += ['library/' + p for p in ['functions','stdtypes','exceptions','string','re','json','csv','pathlib','os','sys','datetime','time','collections','itertools','functools','math','random','statistics','decimal','fractions','typing','dataclasses','enum','argparse','logging','unittest','sqlite3','subprocess','shutil','tempfile','glob','pickle','copy','pprint','textwrap','heapq','bisect','array','queue','threading','concurrent.futures','asyncio','contextlib','abc','io','gzip','zipfile','hashlib','secrets','urllib.request','urllib.parse','http.client','socket','email.message','html','xml.etree.elementtree','configparser','tomllib','venv','traceback','warnings','inspect']]
 
+def repair_legacy_encoding(text):
+    """Undo the previous HTTP Latin-1 decoding of UTF-8 documentation caches."""
+    try:
+        return text.encode('latin1').decode('utf-8')
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
 def download(page):
     url = f'https://docs.python.org/{VERSION}/{page}.html'
     raw_dir=Path(os.environ.get('LIBRARIAN_RAW_DIR',DATA/'raw'))
@@ -21,8 +28,13 @@ def download(page):
     if not path.exists():
         response = requests.get(url, timeout=90)
         response.raise_for_status()
+        response.encoding = 'utf-8'
         path.write_text(response.text, encoding='utf-8')
-    soup = BeautifulSoup(path.read_text(encoding='utf-8'), 'html.parser')
+    cached = path.read_text(encoding='utf-8')
+    html = repair_legacy_encoding(cached)
+    if html != cached:
+        path.write_text(html, encoding='utf-8')
+    soup = BeautifulSoup(html, 'html.parser')
     main = soup.select_one('div.body') or soup.select_one('main')
     if main is None:
         raise ValueError(f'No documentation body: {url}')
@@ -38,7 +50,9 @@ def download(page):
         anchor = section.get('id', '') if section else ''
         heading = section.find(['h1','h2','h3','h4'], recursive=False) if section else None
         key = (anchor, heading.get_text(' ', strip=True) if heading else title)
-        text = block.get_text('\n' if block.name == 'pre' else ' ', strip=block.name != 'pre').strip()
+        # Highlighted code has a span per token. Adding separators between spans
+        # breaks a single Python line into dozens of separate lines.
+        text = block.get_text('' if block.name == 'pre' else ' ', strip=block.name != 'pre').strip()
         if text:
             groups.setdefault(key, []).append(text)
     return [dict(page=page, title=title.strip(), section=section, url=url + ('#' + anchor if anchor else ''), version=VERSION, text='\n\n'.join(blocks)) for (anchor, section), blocks in groups.items()]

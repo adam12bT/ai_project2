@@ -2,10 +2,10 @@
   "version": "3.12",
   "pages": 73,
   "sections": 784,
-  "chunks": 2632,
+  "chunks": 2461,
   "words": 220,
   "overlap": 40,
   "source": "https://docs.python.org/3.12/",
   "license": "https://docs.python.org/3.12/license.html",
-  "sha256": "696a87e561405c090c012875231d68142291cba6908159cc1a6b86af8246e1ea"
+  "sha256": "25af2258534769304705efa4e77915232c28ee9a97fcb171767158ed7bba4ade"
 }

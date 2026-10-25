@@ -1,6 +1,21 @@
 const form = document.querySelector('#form'), q = document.querySelector('#question');
 const results = document.querySelector('#results'), statusEl = document.querySelector('#status');
 let lastQuestion = '';
+function renderAnswer(container, text) {
+  const block = document.createElement('div'); block.className = 'generated-answer';
+  const appendProse = value => value.split(/\n\s*\n/).filter(p => p.trim()).forEach(value => {
+    const paragraph = document.createElement('p'); paragraph.textContent = value.trim(); block.append(paragraph);
+  });
+  const fences = /```[^\n`]*\n([\s\S]*?)```/g;
+  let offset = 0;
+  for (const match of text.matchAll(fences)) {
+    appendProse(text.slice(offset, match.index));
+    const pre = document.createElement('pre'), code = document.createElement('code');
+    code.textContent = match[1].replace(/\n$/, ''); pre.append(code); block.append(pre);
+    offset = match.index + match[0].length;
+  }
+  appendProse(text.slice(offset)); container.append(block);
+}
 fetch('/api/pages').then(r => r.json()).then(pages => pages.forEach(page => {
   const option = document.createElement('option'); option.value = page; option.textContent = page;
   document.querySelector('#page').append(option);
@@ -21,8 +36,7 @@ form.onsubmit = async event => {
     document.querySelector('#timing').textContent = `${Math.round(data.latency_ms)} ms${data.cache_hit ? ' · cached' : ''}`;
     document.querySelector('#results > .note').textContent = data.answer_type === 'groq'
       ? `Generated with Groq · ${data.model} · Check the cited sources` : 'Verbatim evidence · Groq is not configured';
-    const answer = document.createElement('pre'); answer.className = 'generated-answer'; answer.textContent = data.answer;
-    answerEl.append(answer);
+    renderAnswer(answerEl, data.answer);
     for (const c of data.citations) {
       const card = document.createElement('article'); card.className = 'evidence';
       const link = document.createElement('a'); link.href = c.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
