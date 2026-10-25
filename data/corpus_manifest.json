@@ -1,0 +1,11 @@
+{
+  "version": "3.12",
+  "pages": 73,
+  "sections": 784,
+  "chunks": 2632,
+  "words": 220,
+  "overlap": 40,
+  "source": "https://docs.python.org/3.12/",
+  "license": "https://docs.python.org/3.12/license.html",
+  "sha256": "696a87e561405c090c012875231d68142291cba6908159cc1a6b86af8246e1ea"
+}

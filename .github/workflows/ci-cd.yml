@@ -1,0 +1,105 @@
+name: Test and deploy to Hugging Face
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: librarian-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Build and test the Docker app
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build CPU image and prepare neural index
+        run: docker build --tag librarian-ci .
+      - name: Run tests without paid APIs or credentials
+        run: >-
+          docker run --rm
+          --env GENERATOR=extractive
+          librarian-ci python -m pytest -q -p no:cacheprovider
+      - name: Start app
+        run: >-
+          docker run --detach --name librarian-smoke
+          --env GENERATOR=extractive
+          librarian-ci
+      - name: Check health, frontend, and a cited answer
+        run: |
+          docker exec -i librarian-smoke python - <<'PY'
+          import json
+          import time
+          import urllib.request
+          for attempt in range(120):
+              try:
+                  with urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2) as response:
+                      health = json.load(response)
+                  break
+              except OSError:
+                  time.sleep(1)
+          else:
+              raise SystemExit('App failed to start')
+          assert health['status'] == 'ok' and health['chunks'] > 0
+          with urllib.request.urlopen('http://127.0.0.1:8000/') as response:
+              assert b'Ask Python Docs' in response.read()
+          body = json.dumps({'question': 'How do I read CSV rows as dictionaries?', 'page': 'library/csv'}).encode()
+          request = urllib.request.Request('http://127.0.0.1:8000/api/ask', data=body, headers={'Content-Type': 'application/json'})
+          with urllib.request.urlopen(request, timeout=60) as response:
+              answer = json.load(response)
+          assert not answer['abstained'] and answer['citations']
+          print('Frontend, backend and grounded retrieval passed.')
+          PY
+      - name: Container logs
+        if: always()
+        run: docker logs librarian-smoke 2>/dev/null || true
+      - name: Stop smoke-test container
+        if: always()
+        run: docker rm --force librarian-smoke 2>/dev/null || true
+
+  deploy:
+    name: Sync passing main to the existing Space
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Require deployment credential
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          if [ -z "$HF_TOKEN" ]; then
+            echo 'Add HF_TOKEN to GitHub Settings > Secrets and variables > Actions.'
+            exit 1
+          fi
+      - name: Deploy frontend and backend to Hugging Face
+        uses: huggingface/hub-sync@v0.3.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: adamnouassida5/the_dot_camp5
+          hf_token: ${{ secrets.HF_TOKEN }}
+          repo_type: space
+          space_sdk: docker
+          delete_removed: 'true'
+          include: |
+            README.md
+            Dockerfile
+            requirements.txt
+            .dockerignore
+            librarian/**
+            static/**
+            data/chunks.jsonl
+            data/corpus_manifest.json
+            data/LICENSE-python-docs.txt
+          exclude: |
+            .env
+            .env.*
+            **/__pycache__/**

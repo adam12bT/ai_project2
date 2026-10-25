@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+.pytest_cache/
+.env
+data/raw/
+data/index/
+data/cache/
+data/feedback.jsonl
+tmp/
+*.log

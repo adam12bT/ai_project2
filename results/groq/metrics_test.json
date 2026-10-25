@@ -1,0 +1,66 @@
+{
+  "corpus_sha256": "696a87e561405c090c012875231d68142291cba6908159cc1a6b86af8246e1ea",
+  "split": "test",
+  "label_warning": "Automatically resolved weak labels; human review pending. Dev/test questions share topics. Correctness and support are proxies.",
+  "ablation": {
+    "keyword": {
+      "recall_at_5": 0.9454545454545454,
+      "mrr_at_5": 0.8515151515151514,
+      "p50_ms": 6.096900091506541,
+      "p95_ms": 8.975919999647884,
+      "n": 55
+    },
+    "vector": {
+      "recall_at_5": 0.9090909090909091,
+      "mrr_at_5": 0.7718181818181818,
+      "p50_ms": 15.981699922122061,
+      "p95_ms": 19.76349999895319,
+      "n": 55
+    },
+    "hybrid": {
+      "recall_at_5": 0.9636363636363636,
+      "mrr_at_5": 0.8424242424242425,
+      "p50_ms": 17.369300010614097,
+      "p95_ms": 25.891010009218004,
+      "n": 55
+    },
+    "hybrid_rerank": {
+      "recall_at_5": 0.9454545454545454,
+      "mrr_at_5": 0.8742424242424242,
+      "p50_ms": 92.8381000412628,
+      "p95_ms": 113.82405998883767,
+      "n": 55
+    }
+  },
+  "profiles": {
+    "optimized": {
+      "accuracy_proxy": 0.8769230769230769,
+      "exact_copy_support": null,
+      "abstention_accuracy": 1.0,
+      "p50_ms": 1411.2132999580353,
+      "p95_ms": 5451.821620063855,
+      "n": 65,
+      "api_cost_usd": 0.0,
+      "total_tokens": 82027
+    },
+    "baseline": {
+      "accuracy_proxy": 0.8461538461538461,
+      "exact_copy_support": null,
+      "abstention_accuracy": 1.0,
+      "p50_ms": 1626.5844999579713,
+      "p95_ms": 6929.957880009895,
+      "n": 65,
+      "api_cost_usd": 0.0,
+      "total_tokens": 82556
+    }
+  },
+  "optimization": {
+    "p95_reduction": 0.21329657200512875,
+    "accuracy_loss_points": -3.076923076923077,
+    "target_met": false
+  },
+  "hardware": "Windows-10-10.0.26300-SP0",
+  "timestamp_utc": "2026-10-25T14:12:29.208869+00:00",
+  "generator": "groq",
+  "model": "openai/gpt-oss-20b"
+}

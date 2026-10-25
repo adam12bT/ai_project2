@@ -1,0 +1,66 @@
+{
+  "corpus_sha256": "696a87e561405c090c012875231d68142291cba6908159cc1a6b86af8246e1ea",
+  "split": "dev",
+  "label_warning": "Automatically resolved weak labels; human review pending. Dev/test questions share topics. Correctness and support are proxies.",
+  "ablation": {
+    "keyword": {
+      "recall_at_5": 0.8,
+      "mrr_at_5": 0.6333333333333334,
+      "p50_ms": 6.655200035311282,
+      "p95_ms": 10.503030032850802,
+      "n": 55
+    },
+    "vector": {
+      "recall_at_5": 0.9090909090909091,
+      "mrr_at_5": 0.7496969696969698,
+      "p50_ms": 20.34859999548644,
+      "p95_ms": 30.909810028970238,
+      "n": 55
+    },
+    "hybrid": {
+      "recall_at_5": 0.8545454545454545,
+      "mrr_at_5": 0.7560606060606061,
+      "p50_ms": 18.82659993134439,
+      "p95_ms": 25.22569004213437,
+      "n": 55
+    },
+    "hybrid_rerank": {
+      "recall_at_5": 0.8909090909090909,
+      "mrr_at_5": 0.7954545454545454,
+      "p50_ms": 105.94690009020269,
+      "p95_ms": 128.1519600073807,
+      "n": 55
+    }
+  },
+  "profiles": {
+    "baseline": {
+      "accuracy_proxy": 0.8181818181818182,
+      "exact_copy_support": 1.0,
+      "abstention_accuracy": null,
+      "p50_ms": 106.55819997191429,
+      "p95_ms": 143.26848998898637,
+      "n": 55,
+      "api_cost_usd": 0.0,
+      "total_tokens": 0
+    },
+    "optimized": {
+      "accuracy_proxy": 0.7818181818181819,
+      "exact_copy_support": 1.0,
+      "abstention_accuracy": null,
+      "p50_ms": 51.05760006699711,
+      "p95_ms": 68.89473996125162,
+      "n": 55,
+      "api_cost_usd": 0.0,
+      "total_tokens": 0
+    }
+  },
+  "optimization": {
+    "p95_reduction": 0.5191214762817153,
+    "accuracy_loss_points": 3.6363636363636376,
+    "target_met": false
+  },
+  "hardware": "Windows-10-10.0.26300-SP0",
+  "timestamp_utc": "2026-10-25T14:03:29.625373+00:00",
+  "generator": "extractive",
+  "model": null
+}

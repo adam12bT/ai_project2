@@ -1,0 +1,12 @@
+.venv
+.git
+__pycache__
+.pytest_cache
+data/raw
+data/index
+data/feedback.jsonl
+results
+.env
+data/cache
+tmp
+*.log

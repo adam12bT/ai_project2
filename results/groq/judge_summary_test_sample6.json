@@ -1,0 +1,21 @@
+{
+  "method": "Same-model LLM judge for answerable cases; deterministic expected-abstention check for negatives. Not human evaluation. Evenly spaced sample of at most 6 cases per profile; not a full-test score.",
+  "population_per_profile": {
+    "optimized": 65,
+    "baseline": 65
+  },
+  "profiles": {
+    "optimized": {
+      "n": 6,
+      "correct": 1.0,
+      "faithful": 1.0,
+      "citations_accurate": 0.8333333333333334
+    },
+    "baseline": {
+      "n": 6,
+      "correct": 0.8333333333333334,
+      "faithful": 0.8333333333333334,
+      "citations_accurate": 0.8333333333333334
+    }
+  }
+}
