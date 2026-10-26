@@ -5,8 +5,7 @@ import time
 import os
 from collections import OrderedDict
 from pathlib import Path
-# Load optional Arrow before torch on Windows. Shared Python installations may
-# contain Arrow via pandas; loading its DLLs after torch can crash the process.
+
 try:
     import pyarrow
 except ImportError:
