@@ -12,18 +12,16 @@ except ImportError:
     pass
 import torch
 import numpy as np
-from rank_bm25 import BM25Okapi
 from .corpus import DATA
 from .generation import generate, configuration
+from .retrieval import Retriever, RetrievalConfig, tokens
+from .reranking import CrossEncoderReranker, CandidateBudgets, select_evidence
 os.environ.setdefault('HF_HOME',str(DATA/'cache/huggingface'))
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
 EMBEDDER = 'sentence-transformers/all-MiniLM-L6-v2'
 RERANKER = 'cross-encoder/ms-marco-MiniLM-L-6-v2'
 STOP = set('a an the is are was were i you how do does to in of for and or can with python what when which my it'.split())
-
-def tokens(text):
-    return re.findall(r'[a-z_][a-z_0-9]*', text.lower())
 
 def fingerprint():
     return hashlib.sha256((DATA/'chunks.jsonl').read_bytes()).hexdigest()
@@ -47,48 +45,37 @@ class Engine:
         if manifest['corpus_sha256'] != fingerprint() or manifest['embedder'] != EMBEDDER:
             raise ValueError('Index does not match corpus/model. Run python -m librarian.engine')
         self.vectors=np.load(DATA/'index/vectors.npy')
-        self.bm25=BM25Okapi([tokens(c['title']+' '+c['section']+' '+c['text']) for c in self.chunks])
         self.embedder=SentenceTransformer(EMBEDDER)
+        self.retriever=Retriever(self.chunks,self.vectors,self.embedder,RetrievalConfig(
+            bm25_weight=float(os.getenv('BM25_WEIGHT','1')),
+            vector_weight=float(os.getenv('VECTOR_WEIGHT','1')),
+            rrf_k=int(os.getenv('RRF_K','60'))))
         self.reranker=CrossEncoder(RERANKER)
+        self.reranking=CrossEncoderReranker(self.reranker,int(os.getenv('RERANK_BATCH_SIZE','24')))
+        self.budgets=CandidateBudgets(int(os.getenv('BASELINE_CANDIDATES','24')),int(os.getenv('OPTIMIZED_CANDIDATES','8')))
         self.cache=OrderedDict()
 
     def search(self, question, mode='hybrid_rerank', k=5, candidates=24, page=None):
         start=time.perf_counter()
-        eligible=np.array([i for i,c in enumerate(self.chunks) if not page or c['page']==page],dtype=int)
-        if not len(eligible): return [], (time.perf_counter()-start)*1000
-        sparse=self.bm25.get_scores(tokens(question))
-        sparse_order=eligible[np.argsort(-sparse[eligible])[:candidates]]
-        dense = None
-        if mode != 'keyword':
-            query=self.embedder.encode(question, normalize_embeddings=True)
-            dense=self.vectors @ query
-            dense_order=eligible[np.argsort(-dense[eligible])[:candidates]]
-        if mode=='keyword': order=list(sparse_order)
-        elif mode=='vector': order=list(dense_order)
-        else:
-            fusion={}
-            for ranking in (sparse_order,dense_order):
-                for rank,index in enumerate(ranking): fusion[int(index)]=fusion.get(int(index),0)+1/(60+rank+1)
-            order=sorted(fusion,key=fusion.get,reverse=True)[:candidates]
-        scores={}
-        if mode=='hybrid_rerank' and order:
-            values=self.reranker.predict([(question,self.chunks[i]['text']) for i in order], batch_size=24)
-            scores=dict(zip(order,map(float,values)))
-            order=sorted(order,key=scores.get,reverse=True)
-        hits=[{**self.chunks[int(i)], 'rerank_score':scores.get(i), 'vector_score':float(dense[i]) if dense is not None else None, 'keyword_score':float(sparse[i])} for i in order[:k]]
-        return hits,(time.perf_counter()-start)*1000
+        if k<1:raise ValueError('Result count must be positive.')
+        retrieval_mode='hybrid' if mode=='hybrid_rerank' else mode
+        hits=self.retriever.retrieve(question,mode=retrieval_mode,candidates=candidates,page=page)
+        if mode=='hybrid_rerank' and hits:
+            hits=self.reranking.rank(question,hits)
+        return hits[:k],(time.perf_counter()-start)*1000
 
     def ask(self, question, profile='optimized', page=None, use_cache=True):
         start=time.perf_counter(); provider,model=configuration()
-        key=(question.strip(),profile,page,provider,model,os.getenv('RERANK_THRESHOLD','0'))
+        key=(question.strip(),profile,page,provider,model,os.getenv('RERANK_THRESHOLD','0'),os.getenv('RERANK_SCORE_GAP',''))
         if use_cache and key in self.cache:
             result=dict(self.cache[key]); result.update(cache_hit=True,latency_ms=(time.perf_counter()-start)*1000,cost_usd=0.0,usage={})
             self.cache.move_to_end(key); return result
-        hits,search_ms=self.search(question,candidates=24 if profile=='baseline' else 8,k=3,page=page)
+        hits,search_ms=self.search(question,candidates=self.budgets.for_profile(profile),k=3,page=page)
         # A conservative gate, calibrated separately by eval/calibrate.py. Never use RRF as confidence.
         threshold=float(__import__('os').environ.get('RERANK_THRESHOLD','0'))
-        abstained=not hits or hits[0]['rerank_score'] < threshold
-        selected=[] if abstained else hits
+        gap=os.getenv('RERANK_SCORE_GAP','')
+        selected=select_evidence(hits,threshold,float(gap) if gap else None)
+        abstained=not selected
         # The no-key generator returns verbatim evidence, avoiding unsupported paraphrases.
         answer="I don't know. I couldn't find sufficiently relevant evidence in this Python 3.12 corpus."
         if selected:
@@ -105,6 +92,8 @@ class Engine:
                       generation_ms=(time.perf_counter()-start)*1000-search_ms)
         if generated and not abstained:
             result['citations']=[c for c in result['citations'] if c['number'] in generated.citation_numbers]
+            for citation in result['citations']:
+                citation['supporting_quotes']=generated.supporting_quotes.get(citation['number'],[])
         if use_cache:
             self.cache[key]=result
             while len(self.cache)>128: self.cache.popitem(last=False)

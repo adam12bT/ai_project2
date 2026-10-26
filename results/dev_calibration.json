@@ -1,0 +1,376 @@
+{
+  "corpus_sha256": "65196a042f462a46f3a116ee1b08e643671adb1a9dcad194aaa16002c08451b4",
+  "candidate_budget": 24,
+  "threshold": 3.980313301086426,
+  "balanced_accuracy_proxy": 0.7524390243902439,
+  "n": 61,
+  "rows": [
+    {
+      "id": "q001",
+      "question": "How do I read CSV rows as dictionaries?",
+      "score": 5.376186370849609,
+      "relevant": false
+    },
+    {
+      "id": "q003",
+      "question": "How do I write dictionaries to a CSV file?",
+      "score": 6.336190700531006,
+      "relevant": true
+    },
+    {
+      "id": "q005",
+      "question": "How can I decode a JSON string?",
+      "score": 7.592752456665039,
+      "relevant": false
+    },
+    {
+      "id": "q007",
+      "question": "How do I encode an object as a JSON string?",
+      "score": 6.228193759918213,
+      "relevant": false
+    },
+    {
+      "id": "q009",
+      "question": "How do I read a text file using pathlib?",
+      "score": 5.342331886291504,
+      "relevant": true
+    },
+    {
+      "id": "q011",
+      "question": "How do I create a directory with pathlib?",
+      "score": 3.5480504035949707,
+      "relevant": false
+    },
+    {
+      "id": "q013",
+      "question": "How do I find all matches of a regular expression?",
+      "score": 6.249030113220215,
+      "relevant": false
+    },
+    {
+      "id": "q015",
+      "question": "How do I replace text using a regular expression?",
+      "score": 2.2970399856567383,
+      "relevant": false
+    },
+    {
+      "id": "q017",
+      "question": "How do I parse a date string using a format?",
+      "score": 6.465764045715332,
+      "relevant": true
+    },
+    {
+      "id": "q019",
+      "question": "How do I format a datetime as a string?",
+      "score": 7.751948833465576,
+      "relevant": true
+    },
+    {
+      "id": "q021",
+      "question": "How do I count occurrences of items in a list?",
+      "score": 3.0605010986328125,
+      "relevant": false
+    },
+    {
+      "id": "q023",
+      "question": "How do I give dictionary keys automatic default values?",
+      "score": 4.817050933837891,
+      "relevant": false
+    },
+    {
+      "id": "q025",
+      "question": "How do I compute a Cartesian product of iterables?",
+      "score": 7.379830360412598,
+      "relevant": true
+    },
+    {
+      "id": "q027",
+      "question": "How do I generate combinations of a fixed size?",
+      "score": -1.1933592557907104,
+      "relevant": true
+    },
+    {
+      "id": "q029",
+      "question": "How do I cache the results of a function?",
+      "score": 4.968672752380371,
+      "relevant": true
+    },
+    {
+      "id": "q031",
+      "question": "How do I pre-fill some arguments of a function?",
+      "score": 0.7886173725128174,
+      "relevant": false
+    },
+    {
+      "id": "q033",
+      "question": "How do I compare floating point numbers approximately?",
+      "score": 3.8213114738464355,
+      "relevant": false
+    },
+    {
+      "id": "q035",
+      "question": "How do I compute a square root?",
+      "score": 3.6649036407470703,
+      "relevant": true
+    },
+    {
+      "id": "q037",
+      "question": "How do I choose a random element from a sequence?",
+      "score": 6.140957832336426,
+      "relevant": true
+    },
+    {
+      "id": "q039",
+      "question": "How do I sample elements without replacement?",
+      "score": 5.704551696777344,
+      "relevant": true
+    },
+    {
+      "id": "q041",
+      "question": "How do I calculate the median of data?",
+      "score": 7.107749938964844,
+      "relevant": true
+    },
+    {
+      "id": "q043",
+      "question": "How do I calculate an arithmetic average?",
+      "score": 4.059576034545898,
+      "relevant": true
+    },
+    {
+      "id": "q045",
+      "question": "How do I represent decimal numbers exactly?",
+      "score": 5.262600898742676,
+      "relevant": true
+    },
+    {
+      "id": "q047",
+      "question": "How do I represent a rational number?",
+      "score": -0.4551283121109009,
+      "relevant": true
+    },
+    {
+      "id": "q049",
+      "question": "How do I generate methods for a data class?",
+      "score": 4.972273826599121,
+      "relevant": true
+    },
+    {
+      "id": "q051",
+      "question": "How do I create enumeration members that are integers?",
+      "score": 4.190497398376465,
+      "relevant": true
+    },
+    {
+      "id": "q053",
+      "question": "How do I define a command line argument?",
+      "score": 5.4450578689575195,
+      "relevant": true
+    },
+    {
+      "id": "q055",
+      "question": "How do I parse command line options?",
+      "score": 4.180379867553711,
+      "relevant": true
+    },
+    {
+      "id": "q057",
+      "question": "How do I configure basic logging?",
+      "score": 5.662191867828369,
+      "relevant": true
+    },
+    {
+      "id": "q059",
+      "question": "How do I get a named logger?",
+      "score": 6.085052490234375,
+      "relevant": true
+    },
+    {
+      "id": "q061",
+      "question": "How do I test that an exception is raised?",
+      "score": 7.976630210876465,
+      "relevant": true
+    },
+    {
+      "id": "q063",
+      "question": "How do I open a SQLite database?",
+      "score": 6.679715156555176,
+      "relevant": true
+    },
+    {
+      "id": "q065",
+      "question": "How do I save a SQLite transaction?",
+      "score": 1.0150576829910278,
+      "relevant": true
+    },
+    {
+      "id": "q067",
+      "question": "How do I run an external command and wait for it?",
+      "score": -1.8182640075683594,
+      "relevant": true
+    },
+    {
+      "id": "q069",
+      "question": "How do I copy an entire directory tree?",
+      "score": 7.454549789428711,
+      "relevant": true
+    },
+    {
+      "id": "q071",
+      "question": "How do I delete a directory tree?",
+      "score": 7.12724494934082,
+      "relevant": true
+    },
+    {
+      "id": "q073",
+      "question": "How do I create a temporary directory that cleans itself up?",
+      "score": 6.526597499847412,
+      "relevant": true
+    },
+    {
+      "id": "q075",
+      "question": "How do I iterate over wildcard path matches?",
+      "score": 0.7287124395370483,
+      "relevant": false
+    },
+    {
+      "id": "q077",
+      "question": "How do I copy nested objects recursively?",
+      "score": 2.636282205581665,
+      "relevant": true
+    },
+    {
+      "id": "q079",
+      "question": "How do I format an object for readable printing as a string?",
+      "score": 6.059332847595215,
+      "relevant": false
+    },
+    {
+      "id": "q081",
+      "question": "How do I remove common leading indentation from text?",
+      "score": 7.769400119781494,
+      "relevant": true
+    },
+    {
+      "id": "q083",
+      "question": "How do I get the largest n elements of an iterable?",
+      "score": 6.7888383865356445,
+      "relevant": true
+    },
+    {
+      "id": "q085",
+      "question": "How do I find the left insertion point in a sorted list?",
+      "score": 8.12711238861084,
+      "relevant": true
+    },
+    {
+      "id": "q087",
+      "question": "How do I create a synchronized FIFO queue?",
+      "score": 3.980313301086426,
+      "relevant": true
+    },
+    {
+      "id": "q089",
+      "question": "How do I synchronize threads with a lock?",
+      "score": 4.121829032897949,
+      "relevant": true
+    },
+    {
+      "id": "q091",
+      "question": "How do I turn a generator into a context manager?",
+      "score": 6.039840221405029,
+      "relevant": true
+    },
+    {
+      "id": "q093",
+      "question": "How do I open a gzip compressed file?",
+      "score": 8.074846267700195,
+      "relevant": true
+    },
+    {
+      "id": "q095",
+      "question": "How do I work with ZIP archives?",
+      "score": 2.301421880722046,
+      "relevant": true
+    },
+    {
+      "id": "q097",
+      "question": "How do I compute a SHA256 hash?",
+      "score": 4.916923522949219,
+      "relevant": true
+    },
+    {
+      "id": "q099",
+      "question": "How do I generate a secure URL-safe token?",
+      "score": 3.8970284461975098,
+      "relevant": false
+    },
+    {
+      "id": "q101",
+      "question": "How do I encode a mapping as URL query parameters?",
+      "score": 3.6761276721954346,
+      "relevant": true
+    },
+    {
+      "id": "q103",
+      "question": "How do I read INI configuration files?",
+      "score": 6.480205059051514,
+      "relevant": true
+    },
+    {
+      "id": "q105",
+      "question": "How do I parse a TOML string?",
+      "score": 7.698126792907715,
+      "relevant": true
+    },
+    {
+      "id": "q107",
+      "question": "How do I emit a warning?",
+      "score": 3.114729166030884,
+      "relevant": false
+    },
+    {
+      "id": "q109",
+      "question": "How do I inspect the signature of a callable?",
+      "score": 6.920921325683594,
+      "relevant": true
+    },
+    {
+      "id": "dev-negative-1",
+      "question": "Which Django middleware enables CSRF protection?",
+      "score": -9.053594589233398,
+      "relevant": false
+    },
+    {
+      "id": "dev-negative-2",
+      "question": "How do I connect a Motor client to MongoDB Atlas?",
+      "score": -10.651607513427734,
+      "relevant": false
+    },
+    {
+      "id": "dev-negative-3",
+      "question": "Which TensorFlow API loads saved neural network weights?",
+      "score": -8.593815803527832,
+      "relevant": false
+    },
+    {
+      "id": "dev-negative-4",
+      "question": "How do I configure Spring Boot application properties?",
+      "score": -9.364091873168945,
+      "relevant": false
+    },
+    {
+      "id": "dev-negative-5",
+      "question": "How do I create an Android activity in Kotlin?",
+      "score": -4.002626895904541,
+      "relevant": false
+    },
+    {
+      "id": "dev-negative-6",
+      "question": "Which React hook manages component state?",
+      "score": -9.191373825073242,
+      "relevant": false
+    }
+  ],
+  "warning": "Weak dev relevance labels and six curated dev negatives; review manually. Scores are not probabilities. Test questions were not used. Recommendation does not change runtime configuration."
+}

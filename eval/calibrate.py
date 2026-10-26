@@ -2,6 +2,7 @@
 import argparse
 import json
 import math
+import os
 from librarian.corpus import DATA,ROOT
 
 DEV_NEGATIVES=[
@@ -29,6 +30,9 @@ def recommend_threshold(rows):
     return {'threshold':best,'balanced_accuracy_proxy':metrics(best),'n':len(rows)}
 
 def main(candidates=24):
+    # Small matrix/vector queries do not benefit from large BLAS thread pools.
+    os.environ.setdefault('OPENBLAS_NUM_THREADS','1')
+    os.environ.setdefault('OMP_NUM_THREADS','2')
     from librarian.engine import Engine,fingerprint
     engine=Engine();output=[]
     rows=[json.loads(line) for line in (DATA/'eval_questions.jsonl').read_text(encoding='utf-8').splitlines()]
@@ -38,6 +42,7 @@ def main(candidates=24):
         hits,_=engine.search(row['question'],k=1,candidates=candidates)
         output.append(dict(id=row['id'],question=row['question'],score=hits[0]['rerank_score'] if hits else None,
                            relevant=bool(hits and hits[0]['id'] in row['relevant_ids'])))
+        print(f'Scored {row["id"]}',flush=True)
     result={'corpus_sha256':fingerprint(),'candidate_budget':candidates,**recommend_threshold(output),'rows':output,
             'warning':'Weak dev relevance labels and six curated dev negatives; review manually. Scores are not probabilities. Test questions were not used. Recommendation does not change runtime configuration.'}
     folder=ROOT/'results';folder.mkdir(exist_ok=True)

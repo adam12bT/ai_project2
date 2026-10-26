@@ -42,10 +42,14 @@ form.onsubmit = async event => {
       const link = document.createElement('a'); link.href = c.url; link.target = '_blank'; link.rel = 'noopener noreferrer';
       link.textContent = `[${c.number}] ${c.title} →`;
       const section = document.createElement('p'); section.className = 'note'; section.textContent = c.section;
+      card.append(link, section);
+      for (const text of c.supporting_quotes || []) {
+        const quote = document.createElement('blockquote'); quote.textContent = text; card.append(quote);
+      }
       const details = document.createElement('details'), summary = document.createElement('summary');
       summary.textContent = 'Read the source passage';
       const passage = document.createElement('pre'); passage.textContent = c.text;
-      details.append(summary, passage); card.append(link, section, details); answerEl.append(card);
+      details.append(summary, passage); card.append(details); answerEl.append(card);
     }
     results.hidden = false; statusEl.textContent = '';
   } catch (error) { statusEl.textContent = error.message; }

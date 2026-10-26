@@ -119,6 +119,10 @@ With `GROQ_FREE_TIER=true`, API cost is recorded as zero under the user's free a
 
 ## Contributions
 
+The `team/rag-improvements` branch contains four separate RAG review units. See [CONTRIBUTIONS.md](CONTRIBUTIONS.md) for assigned reviewers, commit boundaries, tests and attribution status.
+
+New retrieval settings: `BM25_WEIGHT=1`, `VECTOR_WEIGHT=1`, `RRF_K=60`. Candidate/reranking settings: `BASELINE_CANDIDATES=24`, `OPTIMIZED_CANDIDATES=8`, `RERANK_BATCH_SIZE=24`, and optional `RERANK_SCORE_GAP`. Restart after changing these settings. Every evidence passage must pass `RERANK_THRESHOLD`; optional score-gap filtering further trims weak tail passages. Generated claims now require exact source quotations, checked after normalizing whitespace. This is a traceability check, not proof of semantic correctness.
+
 Implementation, dataset preparation, evaluation scripts and documentation were prepared with Codex assistance. Team members must add their actual names, individual contributions, review notes and explanations before submission. Do not claim unperformed user studies or instructor approval.
 
 ## Submission checklist requiring real-world work
