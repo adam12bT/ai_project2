@@ -21,6 +21,18 @@ def repair_legacy_encoding(text):
     except (UnicodeEncodeError, UnicodeDecodeError):
         return text
 
+def block_location(block, title):
+    """Keep API definitions separate and cite the nearest named symbol."""
+    definition = block.find_parent('dl', class_=lambda value: value and 'py' in value.split())
+    if definition is not None:
+        signature = definition.find('dt', id=True, recursive=False)
+        if signature is not None:
+            return signature['id'], signature.get_text(' ', strip=True), signature['id']
+    section = block.find_parent('section')
+    anchor = section.get('id', '') if section else ''
+    heading = section.find(['h1','h2','h3','h4'], recursive=False) if section else None
+    return anchor, heading.get_text(' ', strip=True) if heading else title, None
+
 def download(page):
     url = f'https://docs.python.org/{VERSION}/{page}.html'
     raw_dir=Path(os.environ.get('LIBRARIAN_RAW_DIR',DATA/'raw'))
@@ -46,16 +58,13 @@ def download(page):
     for block in main.find_all(['p', 'pre', 'dt', 'li']):
         if any(parent.name in ('p', 'pre', 'li', 'dt') for parent in block.parents if parent is not main):
             continue
-        section = block.find_parent('section')
-        anchor = section.get('id', '') if section else ''
-        heading = section.find(['h1','h2','h3','h4'], recursive=False) if section else None
-        key = (anchor, heading.get_text(' ', strip=True) if heading else title)
+        key = block_location(block, title)
         # Highlighted code has a span per token. Adding separators between spans
         # breaks a single Python line into dozens of separate lines.
         text = block.get_text('' if block.name == 'pre' else ' ', strip=block.name != 'pre').strip()
         if text:
             groups.setdefault(key, []).append(text)
-    return [dict(page=page, title=title.strip(), section=section, url=url + ('#' + anchor if anchor else ''), version=VERSION, text='\n\n'.join(blocks)) for (anchor, section), blocks in groups.items()]
+    return [dict(page=page, title=title.strip(), section=section, symbol=symbol, url=url + ('#' + anchor if anchor else ''), version=VERSION, text='\n\n'.join(blocks)) for (anchor, section, symbol), blocks in groups.items()]
 
 def build_corpus(words=220, overlap=40):
     if words < 50 or not 0 <= overlap < words:
