@@ -8,7 +8,7 @@ class Response:
     ok=True
     headers={}
     def json(self):
-        return {'choices':[{'message':{'content':'{"claims":[{"text":"Use DictReader.","sources":[1]}],"abstained":false}'}}],
+        return {'choices':[{'message':{'content':'{"claims":[{"text":"Use DictReader.","sources":[1],"quotes":[{"source":1,"quote":"DictReader maps each row to a dict."}]}],"abstained":false}'}}],
                 'usage':{'prompt_tokens':100,'completion_tokens':10,'total_tokens':110}}
 
 def test_groq_request_and_usage(monkeypatch):
@@ -24,6 +24,7 @@ def test_groq_request_and_usage(monkeypatch):
     answer=g.generate('Read CSV?',HITS)
     assert answer.kind=='groq' and answer.citation_numbers==[1]
     assert answer.usage['total_tokens']==110 and answer.cost_usd==0
+    assert answer.supporting_quotes[1]==['DictReader maps each row to a dict.']
 
 @pytest.mark.parametrize('payload',[
     {'answer':'Use a dict [9].','abstained':False},
@@ -62,3 +63,19 @@ def test_extractive_does_not_call_api(monkeypatch):
     monkeypatch.setenv('GENERATOR','extractive')
     monkeypatch.setattr(g.requests,'post',lambda *a,**kw:pytest.fail('Unexpected network call'))
     assert g.generate('Read CSV?',HITS).kind=='extractive'
+
+def test_fabricated_quotation_rejected():
+    payload={'claims':[{'text':'A claim','sources':[1],'quotes':[{'source':1,'quote':'This invented evidence does not exist.'}]}],'abstained':False}
+    with pytest.raises(g.GenerationError,match='not found'):g.validate_payload(payload,HITS)
+
+def test_every_cited_passage_requires_its_own_quotation():
+    payload={'claims':[{'text':'A claim','sources':[1,2],'quotes':[{'source':1,'quote':HITS[0]['text']}]}],'abstained':False}
+    with pytest.raises(g.GenerationError,match='Every cited source'):g.validate_payload(payload,HITS+HITS)
+
+def test_quotes_allow_harmless_whitespace_differences():
+    payload={'claims':[{'text':'A claim','sources':[1],'quotes':[{'source':1,'quote':'DictReader maps\neach row to a dict.'}]}],'abstained':False}
+    assert g.validate_payload(payload,HITS)[1]==[1]
+
+def test_production_evidence_does_not_accept_legacy_unquoted_answers():
+    with pytest.raises(g.GenerationError,match='structured claims'):
+        g.validate_payload({'answer':'Use DictReader [1].','abstained':False},HITS)
