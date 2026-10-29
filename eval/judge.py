@@ -13,9 +13,11 @@ SCHEMA={'type':'object','properties':{
     'citations_accurate':{'type':'boolean'},'reason':{'type':'string'}},
     'required':['correct','faithful','citations_accurate','reason'],'additionalProperties':False}
 
-def main(split='test',pause=2,limit=0):
-    if not os.getenv('GROQ_API_KEY'):raise SystemExit('Configure GROQ_API_KEY in .env first.')
-    folder=ROOT/'results/groq'
+def main(split='test',pause=2,limit=0,generator='groq'):
+    key_name=generator.upper()+'_API_KEY'
+    if not os.getenv(key_name):raise SystemExit(f'Configure {key_name} in .env first.')
+    endpoint='https://api.openai.com/v1/chat/completions' if generator=='openai' else 'https://api.groq.com/openai/v1/chat/completions'
+    folder=ROOT/'results'/generator
     answers=json.loads((folder/f'answers_{split}.json').read_text(encoding='utf-8'))
     gold={r['id']:r for r in map(json.loads,(DATA/'eval_questions.jsonl').read_text(encoding='utf-8').splitlines())}
     population={profile:len(items) for profile,items in answers.items()}
@@ -25,7 +27,8 @@ def main(split='test',pause=2,limit=0):
     output=folder/f'judgments_{split}{suffix}.jsonl'
     prior=[json.loads(line) for line in output.read_text(encoding='utf-8').splitlines()] if output.exists() else []
     done={(r['profile'],r['id']) for r in prior}
-    model=configuration()[1]
+    model=os.getenv('OPENAI_MODEL','gpt-4.1-mini') if generator=='openai' else os.getenv('GROQ_MODEL','openai/gpt-oss-20b')
+    options={'reasoning_effort':'low','include_reasoning':False} if generator=='groq' and model.startswith('openai/gpt-oss-') else {}
     for profile,items in answers.items():
         for item in items:
             if (profile,item['id']) in done:continue
@@ -44,16 +47,16 @@ def main(split='test',pause=2,limit=0):
                 payload={'question':reference['question'],'reference_symbol':reference['answer'],
                          'reference_passage':reference['source_passage'],'answer':item['answer'],'citations':item['citations']}
                 for attempt in range(3):
-                    r=requests.post('https://api.groq.com/openai/v1/chat/completions',headers={'Authorization':'Bearer '+os.environ['GROQ_API_KEY']},
+                    r=requests.post(endpoint,headers={'Authorization':'Bearer '+os.environ[key_name]},
                         json={'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':json.dumps(payload)}],
-                              'temperature':0,'reasoning_effort':'low','include_reasoning':False,'max_completion_tokens':900,
+                              'temperature':0,'max_completion_tokens':900,**options,
                               'response_format':{'type':'json_schema','json_schema':{'name':'answer_judgment','strict':True,'schema':SCHEMA}}},timeout=(10,60))
                     if r.status_code!=429 or attempt==2:break
                     try:delay=min(45,max(1,float(r.headers.get('retry-after','15'))))
                     except ValueError:delay=15
                     time.sleep(delay)
                 if not r.ok:raise SystemExit(f'Judge stopped at {profile}/{item["id"]}: HTTP {r.status_code}. Completed judgments saved; rerun to resume.')
-                body=r.json();judgment=json.loads(body['choices'][0]['message']['content']);usage=body.get('usage',{});source='groq_same_model_judge'
+                body=r.json();judgment=json.loads(body['choices'][0]['message']['content']);usage=body.get('usage',{});source=generator+'_same_model_judge'
                 if pause:time.sleep(pause)
             row=dict(profile=profile,id=item['id'],**judgment,judge_model=model,source=source,usage=usage)
             with output.open('a',encoding='utf-8') as f:f.write(json.dumps(row)+'\n')
@@ -68,4 +71,5 @@ def main(split='test',pause=2,limit=0):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--split',choices=['dev','test'],default='test');p.add_argument('--pause',type=float,default=2);p.add_argument('--limit',type=int,default=0)
-    args=p.parse_args();main(args.split,args.pause,args.limit)
+    p.add_argument('--generator',choices=['groq','openai'],default='groq')
+    args=p.parse_args();main(args.split,args.pause,args.limit,args.generator)

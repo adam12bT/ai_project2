@@ -34,10 +34,10 @@ def reciprocal_rank_fusion(rankings, weights, constant=60):
     return sorted(scores,key=lambda index:(-scores[index],index)),scores
 
 class Retriever:
-    def __init__(self,chunks,vectors,embedder,config=None):
-        self.chunks=chunks;self.vectors=np.asarray(vectors);self.embedder=embedder
+    def __init__(self,chunks,vector_store,embedder,config=None):
+        self.chunks=chunks;self.vector_store=vector_store;self.embedder=embedder
+        self.row_by_id={chunk['id']:i for i,chunk in enumerate(chunks)}
         self.config=config or RetrievalConfig()
-        if len(chunks)!=len(self.vectors):raise ValueError('Chunk/vector row counts differ.')
         self.keyword_index=BM25Okapi([tokens(c['title']+' '+c['section']+' '+c['text']) for c in chunks])
 
     def retrieve(self,question,mode='hybrid',candidates=24,page=None):
@@ -47,15 +47,16 @@ class Retriever:
         if not len(eligible):return []
         sparse=self.keyword_index.get_scores(tokens(question))
         lexical=eligible[np.argsort(-sparse[eligible],kind='stable')[:candidates]]
-        dense=None;fusion={}
+        dense={};fusion={}
         if mode!='keyword':
             query=self.embedder.encode(question,normalize_embeddings=True)
-            dense=self.vectors @ query
-            semantic=eligible[np.argsort(-dense[eligible],kind='stable')[:candidates]]
+            matches=self.vector_store.search(query,min(candidates,len(eligible)),page=page)
+            dense={self.row_by_id[chunk_id]:score for chunk_id,score in matches}
+            semantic=list(dense)
         if mode=='keyword':order=list(lexical)
         elif mode=='vector':order=list(semantic)
         else:
             order,fusion=reciprocal_rank_fusion([lexical,semantic],[self.config.bm25_weight,self.config.vector_weight],self.config.rrf_k)
         return [{**self.chunks[int(i)],'keyword_score':float(sparse[i]),
-                 'vector_score':float(dense[i]) if dense is not None else None,
+                 'vector_score':dense.get(int(i)),
                  'fusion_score':fusion.get(int(i)),'rerank_score':None} for i in order[:candidates]]

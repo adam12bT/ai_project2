@@ -79,3 +79,55 @@ def test_quotes_allow_harmless_whitespace_differences():
 def test_production_evidence_does_not_accept_legacy_unquoted_answers():
     with pytest.raises(g.GenerationError,match='structured claims'):
         g.validate_payload({'answer':'Use DictReader [1].','abstained':False},HITS)
+
+
+def test_openai_request_and_unknown_cost(monkeypatch):
+    monkeypatch.setenv('GENERATOR','openai')
+    monkeypatch.setenv('OPENAI_API_KEY','test-only-openai-key')
+    monkeypatch.setenv('OPENAI_MODEL','gpt-4.1-mini')
+    monkeypatch.delenv('OPENAI_INPUT_USD_PER_MILLION',raising=False)
+    monkeypatch.delenv('OPENAI_OUTPUT_USD_PER_MILLION',raising=False)
+    def post(url,**kwargs):
+        assert url=='https://api.openai.com/v1/chat/completions'
+        assert kwargs['headers']['Authorization']=='Bearer test-only-openai-key'
+        assert kwargs['json']['model']=='gpt-4.1-mini'
+        assert kwargs['json']['response_format']['type']=='json_schema'
+        assert 'include_reasoning' not in kwargs['json']
+        return Response()
+    monkeypatch.setattr(g.requests,'post',post)
+    answer=g.generate('Read CSV?',HITS)
+    assert answer.kind=='openai' and answer.cost_usd is None
+    assert answer.usage['total_tokens']==110
+    assert answer.supporting_quotes[1]==[HITS[0]['text']]
+
+
+def test_auto_prefers_openai_and_missing_explicit_key_fails(monkeypatch):
+    monkeypatch.setenv('GENERATOR','auto')
+    monkeypatch.setenv('OPENAI_API_KEY','test-only-key')
+    monkeypatch.setenv('GROQ_API_KEY','test-only-groq-key')
+    assert g.configuration()[0]=='openai'
+    monkeypatch.setenv('GENERATOR','openai')
+    monkeypatch.delenv('OPENAI_API_KEY')
+    with pytest.raises(g.GenerationError,match='OPENAI_API_KEY'):
+        g.generate('Read CSV?',HITS)
+
+
+def test_openai_refusal_and_incomplete_output(monkeypatch):
+    monkeypatch.setenv('GENERATOR','openai')
+    monkeypatch.setenv('OPENAI_API_KEY','test-only-key')
+    class Refusal(Response):
+        def json(self):return {'choices':[{'message':{'refusal':'Refused','content':None}}]}
+    monkeypatch.setattr(g.requests,'post',lambda *a,**kw:Refusal())
+    with pytest.raises(g.GenerationError,match='declined'):g.generate('Read CSV?',HITS)
+    class Incomplete(Response):
+        def json(self):return {'choices':[{'message':{'content':'{'},'finish_reason':'length'}]}
+    monkeypatch.setattr(g.requests,'post',lambda *a,**kw:Incomplete())
+    with pytest.raises(g.GenerationError,match='output limit'):g.generate('Read CSV?',HITS)
+
+
+def test_openai_auth_error_does_not_expose_key(monkeypatch):
+    monkeypatch.setenv('GENERATOR','openai');monkeypatch.setenv('OPENAI_API_KEY','secret-openai-value')
+    response=Response();response.status_code=401;response.ok=False
+    monkeypatch.setattr(g.requests,'post',lambda *a,**kw:response)
+    with pytest.raises(g.GenerationError,match='OpenAI rejected') as error:g.generate('Read CSV?',HITS)
+    assert 'secret-openai-value' not in str(error.value)

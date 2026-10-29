@@ -33,7 +33,7 @@ class Feedback(BaseModel):
 def home(): return FileResponse(ROOT/'static/index.html')
 
 @app.get('/health')
-def health(): return dict(status='ok',chunks=len(app.state.engine.chunks),version='3.12',generator=configuration()[0],model=configuration()[1])
+def health(): return dict(status='ok',vector_database='chroma',chunks=len(app.state.engine.chunks),version='3.12',generator=configuration()[0],model=configuration()[1])
 
 @app.get('/api/pages')
 def pages(): return sorted(set(c['page'] for c in app.state.engine.chunks))

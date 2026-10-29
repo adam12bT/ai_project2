@@ -16,6 +16,7 @@ from .corpus import DATA
 from .generation import generate, configuration
 from .retrieval import Retriever, RetrievalConfig, tokens
 from .reranking import CrossEncoderReranker, CandidateBudgets, select_evidence
+from .vector_store import ChromaVectorStore
 os.environ.setdefault('HF_HOME',str(DATA/'cache/huggingface'))
 from sentence_transformers import SentenceTransformer, CrossEncoder
 
@@ -30,11 +31,19 @@ def build_index():
     import torch
     torch.set_num_threads(int(os.getenv('TORCH_NUM_THREADS','4')))
     chunks = [json.loads(line) for line in (DATA/'chunks.jsonl').read_text(encoding='utf-8').splitlines()]
-    model = SentenceTransformer(EMBEDDER)
-    vectors = model.encode([c['title']+'\n'+c['section']+'\n'+c['text'] for c in chunks], normalize_embeddings=True, batch_size=64, show_progress_bar=True)
     folder=DATA/'index'; folder.mkdir(exist_ok=True)
-    np.save(folder/'vectors.npy',vectors)
-    (folder/'manifest.json').write_text(json.dumps(dict(corpus_sha256=fingerprint(), embedder=EMBEDDER, chunks=len(chunks)),indent=2),encoding='utf-8')
+    manifest_path=folder/'manifest.json'
+    old=json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    # Reuse verified legacy embeddings for migration, avoiding another model download.
+    legacy=folder/'vectors.npy'
+    if legacy.exists() and old.get('corpus_sha256')==fingerprint() and old.get('embedder')==EMBEDDER:
+        vectors=np.load(legacy)
+        if len(vectors)!=len(chunks):raise ValueError('Legacy embedding count differs from corpus.')
+    else:
+        model = SentenceTransformer(EMBEDDER)
+        vectors = model.encode([c['title']+'\n'+c['section']+'\n'+c['text'] for c in chunks], normalize_embeddings=True, batch_size=64, show_progress_bar=True)
+    ChromaVectorStore(folder/'chroma').build(chunks,vectors,fingerprint(),EMBEDDER)
+    manifest_path.write_text(json.dumps(dict(backend='chroma',corpus_sha256=fingerprint(), embedder=EMBEDDER, chunks=len(chunks)),indent=2),encoding='utf-8')
 
 class Engine:
     def __init__(self):
@@ -42,11 +51,12 @@ class Engine:
         torch.set_num_threads(int(os.getenv('TORCH_NUM_THREADS','4')))
         self.chunks = [json.loads(line) for line in (DATA/'chunks.jsonl').read_text(encoding='utf-8').splitlines()]
         manifest=json.loads((DATA/'index/manifest.json').read_text())
-        if manifest['corpus_sha256'] != fingerprint() or manifest['embedder'] != EMBEDDER:
+        if manifest.get('backend') != 'chroma' or manifest['corpus_sha256'] != fingerprint() or manifest['embedder'] != EMBEDDER:
             raise ValueError('Index does not match corpus/model. Run python -m librarian.engine')
-        self.vectors=np.load(DATA/'index/vectors.npy')
+        self.vector_store=ChromaVectorStore(DATA/'index/chroma')
+        self.vector_store.open(fingerprint(),EMBEDDER,len(self.chunks))
         self.embedder=SentenceTransformer(EMBEDDER)
-        self.retriever=Retriever(self.chunks,self.vectors,self.embedder,RetrievalConfig(
+        self.retriever=Retriever(self.chunks,self.vector_store,self.embedder,RetrievalConfig(
             bm25_weight=float(os.getenv('BM25_WEIGHT','1')),
             vector_weight=float(os.getenv('VECTOR_WEIGHT','1')),
             rrf_k=int(os.getenv('RRF_K','60'))))
@@ -88,7 +98,7 @@ class Engine:
         result=dict(answer=answer, answer_type='extractive', abstained=abstained, citations=[dict(number=i,id=h['id'],title=h['title'],section=h['section'],url=h['url'],text=h['text']) for i,h in enumerate(selected,1)], search_ms=search_ms,latency_ms=(time.perf_counter()-start)*1000,cache_hit=False,profile=profile,cost_usd=0.0,cost_note='Local inference; excludes hardware, electricity and hosting.',version='3.12')
         result.update(answer_type=generated.kind if generated else provider,model=generated.model if generated else None,
                       usage=generated.usage if generated else {},cost_usd=generated.cost_usd if generated else 0.0,
-                      cost_note='Groq free allowance assumed when GROQ_FREE_TIER=true; excludes local retrieval hardware and hosting.',
+                      cost_note=('Groq free allowance assumed when GROQ_FREE_TIER=true.' if provider=='groq' else 'API cost is unknown unless token prices are configured; local retrieval hardware and hosting are excluded.' if provider=='openai' else 'Local inference; excludes hardware, electricity and hosting.'),
                       generation_ms=(time.perf_counter()-start)*1000-search_ms)
         if generated and not abstained:
             result['citations']=[c for c in result['citations'] if c['number'] in generated.citation_numbers]

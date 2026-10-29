@@ -9,22 +9,36 @@ app_port: 8000
 
 # Ask Python Docs — Project 2: The Librarian
 
-A RAG service over official Python 3.12 documentation. Local BM25 + neural vectors retrieve passages, a cross-encoder reranks them, and Groq generates a cited answer. Without a key, the app explicitly uses an extractive offline baseline. A FastAPI service powers the browser interface.
+A RAG service over official Python 3.12 documentation. BM25 and a persistent Chroma vector database retrieve passages, a cross-encoder reranks them, and OpenAI generates a cited answer. Groq remains an optional provider. Without a key, the app explicitly uses an extractive offline baseline. A FastAPI service powers the browser interface.
 
-## Configure Groq
+## Configure OpenAI
 
-Open the prepared `.env` file and enter your own `GROQ_API_KEY`. Keep the key out of chat, screenshots and version control. `.env` is ignored by git and excluded from Docker builds. Obtain a key at https://console.groq.com/keys.
+Enter your key in the local `.env` file, on one line. Never commit or paste the key in chat. `.env` is ignored by git and excluded from Docker builds.
 
 ```dotenv
-GROQ_API_KEY=your_key_here
-GROQ_MODEL=openai/gpt-oss-20b
-GENERATOR=auto
-GROQ_FREE_TIER=true
+OPENAI_API_KEY=your_key_here
+OPENAI_MODEL=gpt-4.1-mini
+GENERATOR=openai
 ```
 
-`auto` uses Groq when a key exists; `groq` requires a key; `extractive` explicitly disables API calls. Restart the server after changing `.env`. Account-specific quotas still apply. Groq requires no local LLM download; the two small local models are for retrieval and reranking. Questions and retrieved public documentation passages are sent to Groq.
+`auto` prefers OpenAI when its key exists, then Groq, then the extractive offline baseline. `openai` and `groq` require their respective keys; `extractive` disables API calls. Restart after changing `.env`. Only questions and retrieved public documentation passages are sent to the selected provider. Embeddings and reranking remain local; OpenAI embedding calls are not needed. Token usage is recorded; OpenAI cost is unknown unless you configure `OPENAI_INPUT_USD_PER_MILLION` and `OPENAI_OUTPUT_USD_PER_MILLION`. Groq's free-tier setting never applies to OpenAI.
 
-Citation identifiers and paragraph coverage are validated, but semantic faithfulness still requires evaluation. API and quota failures are shown explicitly. Provider references: https://console.groq.com/docs/api-reference and https://console.groq.com/docs/models.
+The configurable OpenAI default is `gpt-4.1-mini`. The integration uses Chat Completions with strict JSON Schema and validates each cited source quotation against its passage. Refusals, incomplete output, API errors and missing keys are surfaced. Quote matching does not prove semantic correctness. See [OpenAI Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=chat).
+
+To keep using Groq instead, set `GENERATOR=groq`, `GROQ_API_KEY`, and optionally `GROQ_MODEL=openai/gpt-oss-20b`.
+
+## Chroma vector database
+
+Chroma stores embeddings, passage text, IDs and metadata in `data/index/chroma/` using a persistent local client and a cosine HNSW index. The embedding model remains `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions). Semantic search queries Chroma with a locally generated question embedding; page filters apply within Chroma as well as BM25 before fusion and reranking. Approximate nearest-neighbor results can differ from the previous exact NumPy search.
+
+Run the migration once after updating dependencies:
+
+```powershell
+./.venv/Scripts/python.exe -m pip install -r requirements.txt
+./.venv/Scripts/python.exe -m librarian.engine
+```
+
+The builder reuses the old `vectors.npy` only if its manifest matches the corpus and embedding model. Otherwise it generates fresh local embeddings. At runtime, Chroma is the vector store; the legacy NumPy file is not searched. Startup validates corpus/model identity and collection count. Stop the app before rebuilding the database. Database files are ignored by git and Docker; Docker builds its own Chroma index from the committed corpus. A rebuild replaces the `python_docs` collection.
 
 ## Setup (Windows / PowerShell, Python 3.11)
 
@@ -57,7 +71,11 @@ Invoke-RestMethod http://127.0.0.1:8000/api/ask -Method Post -ContentType applic
 ./.venv/Scripts/python.exe -m pytest -q
 ./.venv/Scripts/python.exe -m eval.run --split dev
 ./.venv/Scripts/python.exe -m eval.run --split test
-# Real Groq benchmark (uses your account quota):
+# Real OpenAI benchmark (uses your API account):
+./.venv/Scripts/python.exe -m eval.run --split test --generator openai
+# Optional OpenAI judge (additional API usage):
+./.venv/Scripts/python.exe -m eval.judge --split test --generator openai --limit 6
+# Legacy Groq benchmark (uses your account quota):
 ./.venv/Scripts/python.exe -m eval.run --split test --generator groq --pause 12
 # Semantic judge (additional API quota; same-model bias must be reviewed):
 ./.venv/Scripts/python.exe -m eval.judge --split test --pause 8
@@ -67,7 +85,7 @@ Invoke-RestMethod http://127.0.0.1:8000/api/ask -Method Post -ContentType applic
 
 `results/extractive/metrics_test.json` and `results/groq/metrics_test.json` keep offline and Groq measurements separate. Both include retrieval recall@5, MRR@5, latency, correctness proxies, abstention accuracy and the optimization decision. Groq records token usage. Exact-copy support only applies to extractive answers; semantic faithfulness requires judge/human evaluation. `answers_test.json` in each directory is the review artifact. Timings exclude startup and downloads, with cold response caches. This serial benchmark does not establish concurrent-load SLOs.
 
-The corpus was repaired after these measurements to preserve code lines and decode UTF-8 correctly. Saved benchmark scores and chunk IDs refer to the earlier snapshot; see `results/README.md`. The current index and evaluation source labels have been rebuilt, but old scores must not be claimed as measurements of this repaired version.
+The vector store and generation provider have since changed, so these historical results do not measure Chroma/OpenAI. The corpus was repaired after these measurements to preserve code lines and decode UTF-8 correctly. Saved benchmark scores and chunk IDs refer to the earlier snapshot; see `results/README.md`. The current index and evaluation source labels have been rebuilt, but old scores must not be claimed as measurements of this repaired version.
 
 The completed Groq run covers 65 test cases per profile: optimized correctness proxy 0.877, baseline 0.846; both reject all 10 negatives. Optimized p95 is 5,451.8 ms vs 6,930.0 ms baseline (21.3% reduction). The 50% optimization target was **not met**. Proxy scores are not human correctness; quotas/backoff and fixed per-query profile ordering limit timing conclusions. Hardware details are in `results/hardware.json`.
 
@@ -78,7 +96,9 @@ The dataset has 110 answerable cases and 10 out-of-scope cases. Questions are cu
 | Path | Purpose |
 |---|---|
 | `librarian/corpus.py` | Download, section extraction, code-aware chunking, provenance |
-| `librarian/engine.py` | Embeddings, BM25, hybrid fusion, reranking, abstention, cache |
+| `librarian/engine.py` | Index building, retrieval integration, reranking, abstention, cache |
+| `librarian/vector_store.py` | Persistent Chroma database and filtered cosine search |
+| `librarian/generation.py` | OpenAI/Groq API integration and source quotation validation |
 | `librarian/app.py` | API, web UI, explicit feedback capture |
 | `data/eval_questions.jsonl` | Questions, answers, source passages, split and review status |
 | `eval/` | Dataset builder, ablation and paired benchmark, confidence inspection |
@@ -99,10 +119,10 @@ The GitHub Actions workflow in `.github/workflows/ci-cd.yml` builds the CPU Dock
 Configure these secrets once:
 
 - **GitHub repository > Settings > Secrets and variables > Actions:** `HF_TOKEN`, a Hugging Face write token permitted to update `adamnouassida5/the_dot_camp5`.
-- **Hugging Face Space > Settings > Secrets:** `GROQ_API_KEY`, your Groq API key.
-- **Hugging Face Space > Settings > Variables:** `GENERATOR=groq`, `GROQ_MODEL=openai/gpt-oss-20b`, `GROQ_FREE_TIER=true`.
+- **Hugging Face Space > Settings > Secrets:** `OPENAI_API_KEY`, your OpenAI API key (enter it separately in Space settings).
+- **Hugging Face Space > Settings > Variables:** `GENERATOR=openai`, `OPENAI_MODEL=gpt-4.1-mini`. Existing Groq variables must be changed when switching the deployed app.
 
-Deployment replaces the Space's old source files with the runtime allowlist. The README configures Docker and port 8000. `.env`, models, caches, feedback and local evaluation outputs are excluded from sync. The Groq key is not needed by GitHub CI. HF secrets are managed separately from source files.
+Deployment replaces the Space's old source files with the runtime allowlist. The README configures Docker and port 8000. `.env`, models, caches, feedback and local evaluation outputs are excluded from sync. No LLM API key is needed by GitHub CI. HF secrets are managed separately from source files.
 
 The image indexes the committed corpus and downloads public retrieval/reranker weights during build. Runtime model loading is offline. The container runs as UID 1000 with writable data and model-cache directories, as required by Spaces. This avoids re-downloading Python documentation during deployment.
 
@@ -114,6 +134,8 @@ docker run --rm --env-file .env -p 8000:8000 ask-python-docs
 The image downloads the documents and models during build; model startup may require a few GB of RAM. Configure a container host to expose port 8000 and use `/health` for readiness. A public URL requires a hosting account and an actual deployment. This repository does not claim a public deployment exists. Mount `/app/data` persistently if collecting feedback, retaining the existing corpus/index/cache contents. Feedback contains only voluntarily submitted questions and votes; do not submit personal data. Add authentication, rate limiting, HTTPS and storage retention before opening an unrestricted public endpoint.
 
 ## Cost model
+
+OpenAI usage is not treated as free. Estimates are unknown unless the two OpenAI token-price variables are configured. Rates are user supplied; estimates do not account for cached-input discounts.
 
 With `GROQ_FREE_TIER=true`, API cost is recorded as zero under the user's free allowance; account quotas still apply. Hardware, electricity and hosting are excluded. For paid accounts, set that flag false and supply current token prices; otherwise cost is unknown. Python documentation license: https://docs.python.org/3.12/license.html. Keep attribution when redistributing the corpus. No equivalent printed-page count is claimed.
 
@@ -127,7 +149,7 @@ Implementation, dataset preparation, evaluation scripts and documentation were p
 
 ## Submission checklist requiring real-world work
 
-- Obtain instructor approval of the corpus. Groq provides LLM generation; extractive mode is an offline baseline.
+- Obtain instructor approval of the corpus. OpenAI or Groq provides LLM generation; extractive mode is an offline baseline.
 - Review the 120 evaluation labels; independently assess citation relevance and answer completeness.
 - Recruit classmates who use Python; collect real feedback through the app and summarize it.
 - Deploy to your chosen host and record its actual URL.

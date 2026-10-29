@@ -11,8 +11,8 @@ import numpy as np
 
 def run(split='test',limit=0,generator='extractive',pause=0):
     os.environ['GENERATOR']=generator
-    if generator=='groq' and not os.getenv('GROQ_API_KEY'):
-        raise SystemExit('Set GROQ_API_KEY in .env before running Groq evaluation.')
+    if generator in ('groq','openai') and not os.getenv(generator.upper()+'_API_KEY'):
+        raise SystemExit(f'Set {generator.upper()}_API_KEY in .env before running evaluation.')
     rows=[json.loads(l) for l in (DATA/'eval_questions.jsonl').read_text(encoding='utf-8').splitlines()]
     rows=[r for r in rows if r['split']==split]
     if limit: rows=rows[:limit]
@@ -39,7 +39,7 @@ def run(split='test',limit=0,generator='extractive',pause=0):
             # Support is exact-copy evidence, not an LLM faithfulness assessment.
             supported=all(c['text'] in result['answer'] for c in citations) if result['answer_type']=='extractive' else None
             per_profile.setdefault(profile,[]).append(dict(id=row['id'],correct_proxy=bool(correct),exact_copy_support=supported,abstained=result['abstained'],latency_ms=result['latency_ms'],answer=result['answer'],citations=citations,usage=result['usage'],cost_usd=result['cost_usd'],human_correctness=None,human_faithfulness=None,human_citation_accuracy=None))
-            if generator=='groq' and pause: time.sleep(pause)
+            if generator!='extractive' and pause: time.sleep(pause)
             (folder/f'answers_{split}_partial.json').write_text(json.dumps(per_profile,indent=2),encoding='utf-8')
             print(f'{generator}: completed {profile}/{row["id"]}',flush=True)
     for profile,items in per_profile.items():
@@ -48,7 +48,7 @@ def run(split='test',limit=0,generator='extractive',pause=0):
     baseline=profiles['baseline']; optimized=profiles['optimized']
     reduction=1-optimized['p95_ms']/baseline['p95_ms']; loss=baseline['accuracy_proxy']-optimized['accuracy_proxy']
     result=dict(corpus_sha256=fingerprint(),split=split,label_warning='Automatically resolved weak labels; human review pending. Dev/test questions share topics. Correctness and support are proxies.',ablation=ablation,profiles=profiles,optimization=dict(p95_reduction=reduction,accuracy_loss_points=loss*100,target_met=bool(reduction>=.5 and loss<=.02)),hardware=__import__('platform').platform(),timestamp_utc=__import__('datetime').datetime.now(__import__('datetime').timezone.utc).isoformat())
-    result.update(generator=generator,model=configuration()[1] if generator=='groq' else None,
+    result.update(generator=generator,model=configuration()[1] if generator!='extractive' else None,
                   runtime={'embedding_device':str(engine.embedder.device),'reranker_device':str(engine.reranker.model.device)})
     folder=ROOT/'results' / generator;folder.mkdir(parents=True,exist_ok=True)
     (folder/f'metrics_{split}.json').write_text(json.dumps(result,indent=2),encoding='utf-8')
@@ -58,5 +58,5 @@ def run(split='test',limit=0,generator='extractive',pause=0):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--split',choices=['dev','test'],default='test');p.add_argument('--limit',type=int,default=0)
-    p.add_argument('--generator',choices=['extractive','groq'],default='extractive');p.add_argument('--pause',type=float,default=0)
+    p.add_argument('--generator',choices=['extractive','groq','openai'],default='extractive');p.add_argument('--pause',type=float,default=0)
     a=p.parse_args();run(a.split,a.limit,a.generator,a.pause)
