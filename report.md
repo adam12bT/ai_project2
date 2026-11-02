@@ -29,20 +29,25 @@ Tables, nested definitions and long code can lose structure or exceed embedding 
 
 ## Architecture design
 
-BeautifulSoup extracts sections and chunks. Local all-MiniLM-L6-v2 embeddings feed persistent Chroma; BM25 supplies keyword matches. Reciprocal rank fusion combines both rankings, then ms-marco-MiniLM-L-6-v2 reranks 8 candidates (optimized) or 24 (baseline) and returns three passages. OpenAI defaults to gpt-4.1-mini; automatic selection prefers OpenAI, then Groq, then the extractive offline baseline. The app validates citation IDs and OpenAI supporting quotations, and can abstain when evidence is insufficient. FastAPI serves the browser UI and JSON API, with a bounded exact-query cache and serialized inference. Docker packaging is included.
+MiniLM runs inside the app (on the laptop or Hugging Face Space); it creates 384-dimensional vectors. Chroma stores vectors, text and source metadata. BM25 uses word frequency, term rarity and passage length; the cross-encoder reads each question-passage pair to rank relevance. Neither ranking score is calibrated confidence. OpenAI writes the explanation, while the app resolves selected excerpt IDs to exact source text. Citation checks do not establish semantic correctness. Optional Groq and extractive modes are supported. Docker builds the index; FastAPI serves the UI/API. Exact-query caching and serialized inference support operation; feedback is logged for manual review, without automatic retraining.
 
 ```mermaid
 flowchart TD
-    A[Python 3.12 HTML] --> B[Extract sections / chunk]
-    B --> C[BM25 index]
-    B --> D[Local MiniLM / Chroma]
-    U[Browser UI / FastAPI question] --> C
-    U --> D
-    C --> R[Rank fusion / cross-encoder]
+    A[Official Python 3.12 HTML] --> B[BeautifulSoup / 220-word chunks / 40-word overlap]
+    B --> C[BM25 keyword index]
+    B --> M[Local MiniLM / 384-dimensional embeddings]
+    M --> D[Persistent Chroma / cosine HNSW]
+    U[Browser question / FastAPI / optional page filter] --> C
+    U --> Q[Same MiniLM model / question vector]
+    Q --> D
+    C --> R[Reciprocal rank fusion]
     D --> R
-    R --> E[Top 3 passages / evidence threshold]
-    E --> G[OpenAI / Groq / extractive]
-    G --> V[Citation checks / answer or abstention]
+    R --> X[Cross-encoder / question-passage scoring / rerank 8 or 24]
+    X --> E[Best 3 passages / evidence threshold]
+    E --> G[OpenAI / explanation + source and excerpt IDs]
+    E --> N[Abstain if evidence insufficient]
+    G --> V[Resolve exact excerpts / validate citations / one repair attempt]
+    V --> O[Browser / cited answer or labelled source fallback]
 ```
 
 Source: official Python 3.12 documentation (https://docs.python.org/3.12/); design.md and recorded results/ experiments.
