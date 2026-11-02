@@ -34,7 +34,9 @@ form.onsubmit = async event => {
     const answerEl = document.querySelector('#answer'); answerEl.replaceChildren();
     document.querySelector('#thanks').textContent = '';
     document.querySelector('#timing').textContent = `${Math.round(data.latency_ms)} ms${data.cache_hit ? ' · cached' : ''}`;
-    document.querySelector('#results > .note').textContent = ['openai', 'groq'].includes(data.answer_type)
+    document.querySelector('#results > .note').textContent = data.answer_type === 'extractive_fallback'
+      ? 'Source passages shown because the generated explanation failed quotation validation'
+      : ['openai', 'groq'].includes(data.answer_type)
       ? `Generated with ${data.answer_type === 'openai' ? 'OpenAI' : 'Groq'} · ${data.model} · Check the cited sources` : 'Verbatim evidence · Offline mode';
     renderAnswer(answerEl, data.answer);
     for (const c of data.citations) {

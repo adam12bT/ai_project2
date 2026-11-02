@@ -160,7 +160,7 @@ def test_invalid_quote_repaired_once_and_usage_includes_both_calls(monkeypatch,p
     assert answer.cost_usd==pytest.approx(0.00024)
 
 
-def test_repeated_invalid_quote_still_rejected_after_two_calls(monkeypatch):
+def test_repeated_invalid_quote_returns_labelled_source_passages(monkeypatch):
     monkeypatch.setenv('GENERATOR','openai')
     monkeypatch.setenv('OPENAI_API_KEY','test-only-key')
     calls=[]
@@ -172,5 +172,20 @@ def test_repeated_invalid_quote_still_rejected_after_two_calls(monkeypatch):
             return body
     def post(*args,**kwargs):calls.append(1);return BadQuote()
     monkeypatch.setattr(g.requests,'post',post)
-    with pytest.raises(g.QuotationError,match='not found'):g.generate('Read CSV?',HITS)
+    answer=g.generate('Read CSV?',HITS)
     assert len(calls)==2
+    assert answer.kind=='extractive_fallback'
+    assert 'could not be verified' in answer.text
+    assert HITS[0]['text'] in answer.text
+    assert 'Invented source quotation.' not in answer.text
+    assert answer.citation_numbers==[1]
+    assert answer.usage['total_tokens']==220
+
+
+def test_quote_options_are_contiguous_source_excerpts():
+    text='First sentence with enough text.\nA second sentence. '+('x'*650)
+    normalized=' '.join(text.split())
+    options=g.quotation_options(text)
+    assert 'First sentence with enough text.' in options
+    assert 'A second sentence.' in options
+    assert all(12<=len(quote)<=300 and quote in normalized for quote in options)
