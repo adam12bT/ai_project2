@@ -1,68 +1,48 @@
-# Ask Python Docs — The Librarian
+# Ask Python Docs - The Librarian
 
-Generation update: the service uses Groq when a key is configured; extractive mode is the offline baseline. Benchmark generator: groq. Groq end-to-end results require a configured key. Citation syntax validation does not prove semantic faithfulness.
+Project report - page 1; architecture design - page 2
 
-## 1. Corpus and users
+## Objective and corpus
 
-Official Python 3.12 tutorial and selected library documentation: 73 source HTML pages, 784 sections and 2632 chunks. These HTML pages contain variable amounts of content; no equivalent printed-page count is claimed. Intended users are classmates learning Python. Real-user recruitment, feedback and instructor corpus approval remain pending. Corpus hash: `696a87e561405c090c012875231d68142291cba6908159cc1a6b86af8246e1ea`. License and source: https://docs.python.org/3.12/license.html and https://docs.python.org/3.12/.
+The Librarian helps students answer Python questions with cited evidence from official Python 3.12 documentation: 73 HTML pages, 784 sections and 2,632 chunks. It preserves section titles, version and source URLs. Chunks target 220 words with up to 40 words of overlap; this matched the larger 320-word configuration's development recall with shorter contexts.
 
-## 2. Pipeline design
+## Evaluation and results
 
-The loader groups paragraphs, definition terms, lists and code by section, retaining version, title and URL. The default chunk size is 220 words with up to 40 words of whole-line overlap. MiniLM produces normalized embeddings stored in a NumPy matrix. BM25 and dense search are combined using reciprocal rank fusion and a MiniLM cross-encoder reranker. Groq generates structured claims from three passages; the app validates source numbers and attaches citations. The model is openai/gpt-oss-20b, selected from the account's live model list. Extractive mode is a separate offline baseline. Retrieval abstains below a logit threshold of zero; this is a heuristic, not calibrated confidence. Generation can also abstain if evidence is insufficient. No local LLM weights are required for Groq.
+The 120-question dataset contains 55 answerable development cases, 55 answerable test paraphrases and 10 out-of-scope test cases. Symbol-based relevance labels require human review. The historical retrieval results below predate Chroma and must be rerun for the current architecture.
 
-## 3. Retrieval evaluation
-
-The 120-case dataset has 110 answerable questions and 10 out-of-scope questions. Half of answerable questions are development cases; test includes 55 answerable paraphrases plus 10 negatives. Relevant passage IDs are automatically resolved from symbol mentions and require human review. This creates weak relevance labels; incidental mentions can over-credit retrieval. Dev/test share topics and cannot establish unseen-topic generalization.
-
-| Method | Recall@5 | MRR@5 | p50 ms | p95 ms |
-|---|---:|---:|---:|---:|
-| keyword | 0.945 | 0.852 | 6.1 | 9.0 |
-| vector | 0.909 | 0.772 | 16.0 | 19.8 |
-| hybrid | 0.964 | 0.842 | 17.4 | 25.9 |
-| hybrid_rerank | 0.945 | 0.874 | 92.8 | 113.8 |
-
-
-Development-only chunk sensitivity (weak source labels are remapped for each index):
-
-| Chunk configuration | Dev recall@5 (reranked) |
-|---|---:|
-| 140_20 words / overlap | 0.855 |
-| 220_40 words / overlap | 0.891 |
-| 320_60 words / overlap | 0.891 |
-
-
-The 220-word option is retained because it matches the 320-word recall with shorter contexts.
-
-Recall is the fraction of answerable questions with at least one labeled relevant passage among five hits, rather than document-level recall over all possible relevant sources. MRR uses the first such passage. All ablations use the same candidate budget. Latency excludes model startup and downloads and reflects serial local inference.
-
-## 4. Answer evaluation
-
-The correctness proxy checks for a relevant cited passage plus the expected symbol, or abstention for a negative question. This is not human semantic correctness. Exact-copy support only applies to extractive mode; it is null for Groq rather than presented as LLM faithfulness. Answers and citations are saved separately in results/groq and results/extractive. A separate semantic judge checks correctness, faithfulness and citation accuracy; same-model judging is biased and must be supplemented by human review. Human judgments remain pending. Abstention is measured separately on out-of-scope cases.
-
-Same-model LLM judge for answerable cases; deterministic expected-abstention check for negatives. Not human evaluation. Evenly spaced sample of at most 6 cases per profile; not a full-test score.
-
-| Profile | n | Correct | Faithful | Citations |
-|---|---:|---:|---:|---:|
-| optimized | 6 | 1.000 | 1.000 | 0.833 |
-| baseline | 6 | 0.833 | 0.833 | 0.833 |
-
-
-## 5. Optimization
-
-Baseline reranks 24 candidates, optimized reranks 8. Models, corpus, output size and questions stay fixed. Profiles are interleaved per query after a warm-up, with answer caching disabled. Normal operation also has a bounded exact-query cache; its cache hits are not counted as the primary optimization evidence.
-
-| Profile | Correctness proxy | p50 ms | p95 ms |
+| Retrieval method | Recall@5 | MRR@5 | p95 (ms) |
 |---|---:|---:|---:|
-| optimized | 0.877 | 1411.2 | 5451.8 |
-| baseline | 0.846 | 1626.6 | 6930.0 |
+| BM25 | 0.945 | 0.852 | 9.0 |
+| Dense vector | 0.909 | 0.772 | 19.8 |
+| Hybrid fusion | 0.964 | 0.842 | 25.9 |
+| Hybrid + reranker | 0.945 | 0.874 | 113.8 |
 
-Measured p95 reduction: 21.3%. Accuracy proxy loss: -3.08 points. Numeric target met on proxy: False. Human correctness validation remains pending.
+## Optimization
 
+In the earlier Groq benchmark, reducing reranking from 24 to 8 candidates lowered end-to-end p95 from 6,930 to 5,452 ms (21.3%); the correctness proxy rose from 0.846 to 0.877. The proxy checks expected symbols and cited passages, not human semantic correctness. These results do not establish current OpenAI/Chroma performance; the recorded optimization target was not met.
 
-With GROQ_FREE_TIER=true, API cost is recorded as zero under the configured account allowance; quotas still apply. Local baseline inference has no API bill. Actual token usage is recorded, with paid rates configurable rather than hard-coded. The reduced candidate set can lose passages. Chunk-size sensitivity has a reproducible script; results are only claimed if corresponding output files exist.
+## Limitations and next steps
 
-## 6. Failure cases, costs and delivery
+Tables, nested definitions and long code can lose structure or exceed embedding limits. Citation checks do not prove semantic support; abstention uses a heuristic threshold. Shared development/test topics limit generalization claims. Next steps: human relevance and answer review, new Chroma/OpenAI benchmarks, user feedback and concurrent-load testing. Public deployment and user validation remain pending. Token usage is recorded; OpenAI cost requires configured prices.
 
-Tables, long code and nested definitions can lose structure. Embedding token limits can truncate chunks. Relevance scores do not guarantee answerability; a copied passage can be irrelevant. Third-party APIs are out of scope. Public deployment and real-user feedback have not been established by a local implementation.
+<div style="page-break-before: always;"></div>
 
-Local model inference incurs no API bill but consumes hardware and electricity. The measured machine has CUDA available; model device selection is automatic, so Docker/CPU timings can differ. For monthly host cost H and N requests, fixed allocation is H/N; extrapolating to 100N requests is valid only while capacity holds. The serialized service needs load testing before estimating production p95. Keep corpus and hardware details with measurements. The repository includes setup, API/UI, Dockerfile, eval data, ablations, optimization and postmortem. Team names and real contributions must be added before submission. No API keys or personal records are included.
+## Architecture design
+
+BeautifulSoup extracts sections and chunks. Local all-MiniLM-L6-v2 embeddings feed persistent Chroma; BM25 supplies keyword matches. Reciprocal rank fusion combines both rankings, then ms-marco-MiniLM-L-6-v2 reranks 8 candidates (optimized) or 24 (baseline) and returns three passages. OpenAI defaults to gpt-4.1-mini; automatic selection prefers OpenAI, then Groq, then the extractive offline baseline. The app validates citation IDs and OpenAI supporting quotations, and can abstain when evidence is insufficient. FastAPI serves the browser UI and JSON API, with a bounded exact-query cache and serialized inference. Docker packaging is included.
+
+```mermaid
+flowchart TD
+    A[Python 3.12 HTML] --> B[Extract sections / chunk]
+    B --> C[BM25 index]
+    B --> D[Local MiniLM / Chroma]
+    U[Browser UI / FastAPI question] --> C
+    U --> D
+    C --> R[Rank fusion / cross-encoder]
+    D --> R
+    R --> E[Top 3 passages / evidence threshold]
+    E --> G[OpenAI / Groq / extractive]
+    G --> V[Citation checks / answer or abstention]
+```
+
+Source: official Python 3.12 documentation (https://docs.python.org/3.12/); design.md and recorded results/ experiments.
