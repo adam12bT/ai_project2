@@ -131,3 +131,46 @@ def test_openai_auth_error_does_not_expose_key(monkeypatch):
     monkeypatch.setattr(g.requests,'post',lambda *a,**kw:response)
     with pytest.raises(g.GenerationError,match='OpenAI rejected') as error:g.generate('Read CSV?',HITS)
     assert 'secret-openai-value' not in str(error.value)
+
+
+@pytest.mark.parametrize('provider',['openai','groq'])
+def test_invalid_quote_repaired_once_and_usage_includes_both_calls(monkeypatch,provider):
+    monkeypatch.setenv('GENERATOR',provider)
+    monkeypatch.setenv(provider.upper()+'_API_KEY','test-only-key')
+    monkeypatch.setenv('GROQ_FREE_TIER','false')
+    monkeypatch.setenv(provider.upper()+'_INPUT_USD_PER_MILLION','1')
+    monkeypatch.setenv(provider.upper()+'_OUTPUT_USD_PER_MILLION','2')
+    calls=[]
+    class BadQuote(Response):
+        def json(self):
+            body=super().json()
+            body['choices'][0]['message']['content']=body['choices'][0]['message']['content'].replace(
+                HITS[0]['text'],'Invented source quotation.')
+            return body
+    def post(url,**kwargs):
+        calls.append(kwargs['json'])
+        return BadQuote() if len(calls)==1 else Response()
+    monkeypatch.setattr(g.requests,'post',post)
+    answer=g.generate('Read CSV?',HITS)
+    assert len(calls)==2
+    assert 'previous attempt failed quotation validation' in calls[1]['messages'][0]['content']
+    assert calls[0]['messages'][1]==calls[1]['messages'][1]
+    assert answer.supporting_quotes=={1:[HITS[0]['text']]}
+    assert answer.usage==dict(prompt_tokens=200,completion_tokens=20,total_tokens=220)
+    assert answer.cost_usd==pytest.approx(0.00024)
+
+
+def test_repeated_invalid_quote_still_rejected_after_two_calls(monkeypatch):
+    monkeypatch.setenv('GENERATOR','openai')
+    monkeypatch.setenv('OPENAI_API_KEY','test-only-key')
+    calls=[]
+    class BadQuote(Response):
+        def json(self):
+            body=super().json()
+            body['choices'][0]['message']['content']=body['choices'][0]['message']['content'].replace(
+                HITS[0]['text'],'Invented source quotation.')
+            return body
+    def post(*args,**kwargs):calls.append(1);return BadQuote()
+    monkeypatch.setattr(g.requests,'post',post)
+    with pytest.raises(g.QuotationError,match='not found'):g.generate('Read CSV?',HITS)
+    assert len(calls)==2

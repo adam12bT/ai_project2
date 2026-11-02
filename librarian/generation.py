@@ -13,6 +13,9 @@ load_dotenv(ROOT / '.env', override=False)
 class GenerationError(RuntimeError):
     """Safe, user-visible error; never contains API credentials or response bodies."""
 
+class QuotationError(GenerationError):
+    """A structured answer needs its source quotations repaired."""
+
 @dataclass
 class Answer:
     text: str
@@ -54,7 +57,7 @@ def validate_payload(payload, evidence):
             if not isinstance(evidence,int):
                 quotes=claim.get('quotes')
                 if not isinstance(quotes,list) or not quotes:
-                    raise GenerationError('A generated claim was missing supporting quotations. Please retry.')
+                    raise QuotationError('A generated claim was missing supporting quotations. Please retry.')
                 quoted_sources=set()
                 for quotation in quotes:
                     if not isinstance(quotation,dict):raise GenerationError('Invalid supporting quotation.')
@@ -64,10 +67,10 @@ def validate_payload(payload, evidence):
                     normalize=lambda value:re.sub(r'\s+',' ',value).strip()
                     excerpt=normalize(quote);passage=normalize(evidence[source-1]['text'])
                     if len(excerpt)<min(12,len(passage)) or not excerpt or excerpt not in passage:
-                        raise GenerationError('A supporting quotation was not found in its cited passage. Please retry.')
+                        raise QuotationError('A supporting quotation was not found in its cited passage. Please retry.')
                     quoted_sources.add(source)
                 if quoted_sources!=set(refs):
-                    raise GenerationError('Every cited source must have a verified quotation. Please retry.')
+                    raise QuotationError('Every cited source must have a verified quotation. Please retry.')
             paragraphs.append(claim['text'].strip()+' '+''.join(f'[{n}]' for n in sorted(set(refs))))
         text='\n\n'.join(paragraphs)
         return text,sorted(set(n for claim in claims for n in claim['sources'])),False
@@ -86,7 +89,7 @@ def validate_payload(payload, evidence):
             raise GenerationError('A generated paragraph was missing a citation. Please retry.')
     return answer.strip(),sorted(set(map(int,refs))),False
 
-def generate(question, hits):
+def generate(question, hits, *, _repair=False):
     provider,model=configuration()
     if provider=='extractive':
         return Answer('\n\n'.join(f'[{i}] '+h['text'] for i,h in enumerate(hits,1)),list(range(1,len(hits)+1)),False,'extractive',None,{},0.0)
@@ -105,6 +108,12 @@ def generate(question, hits):
             'supported by its cited evidence. Give at most three concise claims; include code only when supported. '
             'If evidence is insufficient set abstained=true and claims=[]. '
             'Do not claim that citation syntax proves factual correctness.')
+    if _repair:
+        system += (' A previous attempt failed quotation validation. Recreate the answer using only '
+                   'contiguous excerpts copied exactly from the text field of each cited evidence item. '
+                   'Do not add Markdown backticks, change punctuation, or combine separate excerpts in a quote. '
+                   'Use separate quote objects for separate excerpts. Omit unsupported claims; '
+                   'abstain if the evidence cannot support an answer.')
     try:
         options={'reasoning_effort':'low','include_reasoning':False} if provider=='groq' and model.startswith('openai/gpt-oss-') else {}
         schema={'type':'object','properties':{
@@ -141,15 +150,28 @@ def generate(question, hits):
         if body['choices'][0].get('finish_reason')=='length':
             raise GenerationError(f'{label} reached the output limit. Ask a shorter question or increase GENERATION_MAX_TOKENS.')
         payload=json.loads(message['content'])
-        text,refs,abstained=validate_payload(payload,hits)
+        usage={k:int(body.get('usage',{}).get(k,0)) for k in ('prompt_tokens','completion_tokens','total_tokens')}
+        try:
+            text,refs,abstained=validate_payload(payload,hits)
+        except QuotationError:
+            if _repair:
+                raise
+            repaired=generate(question,hits,_repair=True)
+            repaired.usage={k:usage[k]+repaired.usage.get(k,0) for k in usage}
+            repaired.cost_usd=usage_cost(provider,repaired.usage)
+            return repaired
         supporting_quotes={}
         for claim in payload.get('claims',[]) if not abstained else []:
             for quotation in claim.get('quotes',[]):
                 excerpts=supporting_quotes.setdefault(quotation['source'],[])
                 if quotation['quote'] not in excerpts:excerpts.append(quotation['quote'])
-        usage={k:int(body.get('usage',{}).get(k,0)) for k in ('prompt_tokens','completion_tokens','total_tokens')}
     except (ValueError,KeyError,IndexError,TypeError):
         raise GenerationError(f'{label} returned an unreadable answer. Please retry.') from None
+    return Answer(text,refs,abstained,provider,model,usage,usage_cost(provider,usage),supporting_quotes)
+
+
+def usage_cost(provider, usage):
+    # Include both attempts when a quotation repair was needed.
     # Free-tier billing is a user setting, not a claim about future/provider pricing.
     cost=0.0 if provider=='groq' and os.getenv('GROQ_FREE_TIER','true').lower()=='true' else None
     prefix=provider.upper()
@@ -157,4 +179,4 @@ def generate(question, hits):
     output_rate=os.getenv(prefix+'_OUTPUT_USD_PER_MILLION')
     if cost is None and input_rate and output_rate:
         cost=(usage['prompt_tokens']*float(input_rate)+usage['completion_tokens']*float(output_rate))/1e6
-    return Answer(text,refs,abstained,provider,model,usage,cost,supporting_quotes)
+    return cost
