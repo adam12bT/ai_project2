@@ -8,7 +8,7 @@ class Response:
     ok=True
     headers={}
     def json(self):
-        return {'choices':[{'message':{'content':'{"claims":[{"text":"Use DictReader.","sources":[1],"quotes":[{"source":1,"quote":"DictReader maps each row to a dict."}]}],"abstained":false}'}}],
+        return {'choices':[{'message':{'content':'{"claims":[{"text":"Use DictReader.","sources":[1],"quotes":[{"source":1,"quote_id":1}]}],"abstained":false}'}}],
                 'usage':{'prompt_tokens':100,'completion_tokens':10,'total_tokens':110}}
 
 def test_groq_request_and_usage(monkeypatch):
@@ -145,7 +145,7 @@ def test_invalid_quote_repaired_once_and_usage_includes_both_calls(monkeypatch,p
         def json(self):
             body=super().json()
             body['choices'][0]['message']['content']=body['choices'][0]['message']['content'].replace(
-                HITS[0]['text'],'Invented source quotation.')
+                '"quote_id":1','"quote_id":999')
             return body
     def post(url,**kwargs):
         calls.append(kwargs['json'])
@@ -168,7 +168,7 @@ def test_repeated_invalid_quote_returns_labelled_source_passages(monkeypatch):
         def json(self):
             body=super().json()
             body['choices'][0]['message']['content']=body['choices'][0]['message']['content'].replace(
-                HITS[0]['text'],'Invented source quotation.')
+                '"quote_id":1','"quote_id":999')
             return body
     def post(*args,**kwargs):calls.append(1);return BadQuote()
     monkeypatch.setattr(g.requests,'post',post)
@@ -189,3 +189,21 @@ def test_quote_options_are_contiguous_source_excerpts():
     assert 'First sentence with enough text.' in options
     assert 'A second sentence.' in options
     assert all(12<=len(quote)<=300 and quote in normalized for quote in options)
+
+
+def test_selected_quote_is_resolved_from_its_own_source():
+    context=[{'quote_options':[{'text':'First original passage.'}]},
+             {'quote_options':[{'text':'Second original passage.'},{'text':'Another exact excerpt.'}]}]
+    payload={'abstained':False,'claims':[{'text':'Explanation','sources':[2],
+                'quotes':[{'source':2,'quote_id':2,'quote':'Fabricated text'}]}]}
+    g.resolve_quotations(payload,context)
+    assert payload['claims'][0]['quotes'][0]['quote']=='Another exact excerpt.'
+    assert g.validate_payload(payload,[{'text':'First original passage.'},
+               {'text':'Second original passage. Another exact excerpt.'}])[1]==[2]
+
+
+@pytest.mark.parametrize('source,quote_id',[(1,2),(0,1),(True,1),(1,True),(1,0),(2,1)])
+def test_quote_selection_rejects_unknown_or_invalid_ids(source,quote_id):
+    payload={'abstained':False,'claims':[{'quotes':[{'source':source,'quote_id':quote_id}]}]}
+    with pytest.raises(g.QuotationError):
+        g.resolve_quotations(payload,[{'quote_options':[{'text':'Original excerpt.'}]}])
